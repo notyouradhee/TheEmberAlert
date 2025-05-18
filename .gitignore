@@ -172,3 +172,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+nasa_firms_notebook/
+*.pkl
+datasets/
