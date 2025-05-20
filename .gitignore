@@ -178,6 +178,5 @@ nasa_firms_notebook/
 *.pkl
 datasets/
 original/
-=======
 .netrc.txt
->>>>>>> main
+
