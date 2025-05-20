@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -177,3 +178,6 @@ nasa_firms_notebook/
 *.pkl
 datasets/
 original/
+=======
+.netrc.txt
+>>>>>>> main
