@@ -180,3 +180,14 @@ datasets/
 original/
 .netrc.txt
 
+<<<<<<< HEAD
+=======
+.env
+
+.venv/
+*.egg-info/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pkl
+>>>>>>> 23e1e8c0033550c87b85f02ba9083ab0c144bea0
