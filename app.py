@@ -39,9 +39,7 @@ def load_data(country):
     return df
 
 
-# ----------------------------
-# 🔹 Add a Legend to the Map
-# ----------------------------
+# add legend to map
 def add_legend_to_map(map_object):
 
     macro = MacroElement()
