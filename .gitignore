@@ -189,5 +189,5 @@ original/
 __pycache__/
 *.py[cod]
 *.pyo
-*.pkl
+.streamlit/secrets.toml
 >>>>>>> 23e1e8c0033550c87b85f02ba9083ab0c144bea0

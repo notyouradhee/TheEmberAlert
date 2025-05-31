@@ -7,8 +7,6 @@ import plotly.graph_objects as go
 import requests
 from streamlit_folium import st_folium
 from st_aggrid import AgGrid, GridOptionsBuilder
-import mysql.connector
-from mysql.connector import Error
 import logging
 import smtplib
 from email.message import EmailMessage
@@ -18,6 +16,13 @@ from math import radians, cos, sin, asin, sqrt
 import matplotlib.pyplot as plt
 import tempfile
 import os
+
+# =========== SUPABASE (REPLACE MYSQL) ===========
+from supabase import create_client, Client
+
+SUPABASE_URL = st.secrets["supabase"]["url"]
+SUPABASE_KEY = st.secrets["supabase"]["key"]
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # =========== LOGGING ===========
 logger = logging.getLogger(__name__)
@@ -33,19 +38,6 @@ logger.addHandler(stream_handler)
 # =========== CONSTANTS ===========
 allowed_domains = ["gmail.com", "naver.com", "outlook.com", "yahoo.com", "hotmail.com", "protonmail.com"]
 severity_options = ["Low", "Medium", "High"]
-
-# =========== DB HELPER ===========
-def get_connection():
-    try:
-        return mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="1234",
-            database="emberalert"
-        )
-    except Error as e:
-        logger.error(f"DB connection failed: {e}")
-        return None
 
 # =========== EMAIL ===========
 def send_fire_alert_email(receiver_email, location, confidence, severity):
@@ -134,16 +126,11 @@ def get_severity(conf):
     else:
         return "Low"
 
-# =========== ALERT LOGIC ===========
+# =========== ALERT LOGIC (SUPABASE) ===========
 def notify_matching_subscribers(fire_lat, fire_lon, fire_confidence, fire_severity, location_str):
-    connection = get_connection()
-    if not connection:
-        st.error("Database connection failed! Cannot send alerts.")
-        return
     try:
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM subscription WHERE severity_level=%s", (fire_severity,))
-        all_subs = cursor.fetchall()
+        query = supabase.table("subscription").select("*").eq("severity_level", fire_severity)
+        all_subs = query.execute().data
         notified = 0
         for sub in all_subs:
             sub_lat, sub_lon = float(sub['latitude']), float(sub['longitude'])
@@ -158,23 +145,18 @@ def notify_matching_subscribers(fire_lat, fire_lon, fire_confidence, fire_severi
     except Exception as e:
         logger.error(f"Error in notify_matching_subscribers: {e}")
         st.error("Error sending alerts.")
-    finally:
-        cursor.close()
-        connection.close()
 
 # =========== DATA HELPERS ===========
 @st.cache_data
 def load_data(country):
     if country == 'Nepal':
-        base_dir = os.path.dirname(__file__)  # Get the current script directory
+        base_dir = os.path.dirname(__file__)
         csv_path = os.path.join(base_dir, "data", "processed", "nepal_combined.csv")
         df = pd.read_csv(csv_path)
-        # df = pd.read_csv(r"D:\emberalert\wildfire_prediction\data\processed\nepal_combined.csv")
     elif country == 'South Korea':
-        base_dir = os.path.dirname(__file__)  # Get the current script directory
+        base_dir = os.path.dirname(__file__)
         csv_path = os.path.join(base_dir, "data", "processed", "korea_combined.csv")
         df = pd.read_csv(csv_path)
-        # df = pd.read_csv(r"D:\emberalert\wildfire_prediction\data\processed\korea_combined.csv")
     else:
         df = pd.DataFrame()
     if not df.empty:
@@ -262,40 +244,29 @@ def generate_viz_pdf_report(filtered_viz, region, date_range):
     for line in summary.split('\n'):
         pdf.cell(0, 8, line, ln=1)
     pdf.ln(4)
-
     if not filtered_viz.empty:
-        # Add severity column
         filtered_viz['severity'] = filtered_viz['confidence'].apply(get_severity)
         daily_counts = filtered_viz.groupby([filtered_viz['acq_date'].dt.date, 'severity']).size().unstack(fill_value=0)
-
-        # Generate the bar chart using matplotlib
         fig, ax = plt.subplots(figsize=(7, 3))
         daily_counts.plot(kind='bar', stacked=True, ax=ax, color={'High': 'red', 'Medium': 'orange', 'Low': 'yellow'})
         ax.set_title('Wildfire Incidents per Day by Severity')
         ax.set_xlabel('Date')
         ax.set_ylabel('Incidents')
         ax.legend(title="Severity")
-        # plt.xticks(rotation=45, ha='right', fontsize=7)
-        # plt.tight_layout()
         ax.set_xticks(range(len(daily_counts.index)))
         ax.set_xticklabels([d.strftime('%b %d, %Y') for d in daily_counts.index], rotation=45, ha='right', fontsize=7)
         plt.tight_layout()
-
-        # Save the image to a temp file
         img_temp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
         plt.savefig(img_temp.name, format='png', bbox_inches='tight')
         plt.close(fig)
         pdf.image(img_temp.name, x=10, y=pdf.get_y(), w=190)
         img_temp.close()
-        os.unlink(img_temp.name)  # Remove temp file after inserting
-
-        pdf.ln(65)  # Make sure the next section is below the image
-
+        os.unlink(img_temp.name)
+        pdf.ln(65)
     pdf_output = io.BytesIO()
     pdf.output(pdf_output)
     pdf_output.seek(0)
     return pdf_output
-    
 
 # ========== VISUALIZATION FUNCTIONS ==========
 def show_overview(df, country):
@@ -317,7 +288,6 @@ def show_yearly_trend(df):
         title="Yearly Trend of Wildfire Incidents",
         labels={"year": "Year", "count": "Count"},
     )
-    # Fix the x-axis so it only shows integer years
     fig.update_layout(
         xaxis=dict(
             tickmode='array',
@@ -329,7 +299,7 @@ def show_yearly_trend(df):
         title_x=0.5,
     )
     st.plotly_chart(fig, use_container_width=True)
-    
+
 def plot_the_map(df, date):
     st.subheader(f"Wildfire Map on {date}")
     if not df.empty:
@@ -337,7 +307,6 @@ def plot_the_map(df, date):
             location=[df["latitude"].mean(), df["longitude"].mean()],
             zoom_start=8,
         )
-        # Plot all fire points
         for _, row in df.iterrows():
             confidence = row["confidence"]
             color = (
@@ -354,9 +323,6 @@ def plot_the_map(df, date):
                 fill_opacity=0.7,
             ).add_to(fol_map)
 
-        
-        
-
         st_folium(
             fol_map,
             height=400,
@@ -367,7 +333,6 @@ def plot_the_map(df, date):
     else:
         st.warning("No wildfire data available for this date.")
     st.markdown("---")
-
 
 def day_night_analysis(df):
     st.subheader("Day vs Night Proportion Analysis")
@@ -570,7 +535,6 @@ def main():
             plot_the_map(filtered_data, selected_date)
         else:
             st.warning("No data for this date.")
-        
 
     # 2 - Reports/Downloads
     with tabs[2]:
@@ -636,7 +600,7 @@ def main():
                 location_str
             )
 
-    # 5 - Subscribe / Manage
+    # 5 - Subscribe / Manage (SUPABASE)
     with tabs[5]:
         tab = st.radio("🚦 Alert System", ["Subscribe to Alerts", "Manage Your Alerts"])
         if tab == "Subscribe to Alerts":
@@ -657,44 +621,33 @@ def main():
                     st.error("❌ Select at least one severity level.")
                 else:
                     with st.spinner("Subscribing..."):
-                        connection = get_connection()
-                        if connection:
-                            try:
-                                cursor = connection.cursor()
-                                inserted = 0
-                                already_subscribed = 0
-                                for sev in severity_level:
-                                    cursor.execute("""
-                                        SELECT COUNT(*) FROM subscription 
-                                        WHERE email=%s AND latitude=%s AND longitude=%s AND severity_level=%s
-                                    """, (email, lat, lon, sev))
-                                    count = cursor.fetchone()[0]
-                                    if count == 0:
-                                        cursor.execute("""
-                                            INSERT INTO subscription (email, latitude, longitude, severity_level, subscribed_at)
-                                            VALUES (%s, %s, %s, %s, NOW())
-                                        """, (email, lat, lon, sev))
-                                        inserted += 1
-                                    else:
-                                        already_subscribed += 1
-                                connection.commit()
-                                st.session_state['user_email'] = email
+                        inserted = 0
+                        already_subscribed = 0
+                        for sev in severity_level:
+                            # Check if subscription exists
+                            query = supabase.table("subscription").select("*").eq("email", email).eq("latitude", lat).eq("longitude", lon).eq("severity_level", sev)
+                            count = len(query.execute().data)
+                            if count == 0:
+                                # Insert new
+                                supabase.table("subscription").insert({
+                                    "email": email,
+                                    "latitude": lat,
+                                    "longitude": lon,
+                                    "severity_level": sev,
+                                    # 'subscribed_at': auto by supabase
+                                }).execute()
+                                inserted += 1
+                            else:
+                                already_subscribed += 1
+                        st.session_state['user_email'] = email
 
-                                if inserted > 0:
-                                    st.success(f"✅ You successfully subscribed to {inserted} alert(s)!")
-                                    send_subscription_confirmation_email(email, lat, lon, severity_level)
-                                    if already_subscribed > 0:
-                                        st.info(f"⚠️ Already subscribed to {already_subscribed} selected alert(s).")
-                                else:
-                                    st.info("⚠️ Already subscribed to all selected alert(s).")
-                            except Exception as e:
-                                logger.error(f"Error during subscription insert: {e}")
-                                st.error("❌ Error occurred while subscribing.")
-                            finally:
-                                cursor.close()
-                                connection.close()
+                        if inserted > 0:
+                            st.success(f"✅ You successfully subscribed to {inserted} alert(s)!")
+                            send_subscription_confirmation_email(email, lat, lon, severity_level)
+                            if already_subscribed > 0:
+                                st.info(f"⚠️ Already subscribed to {already_subscribed} selected alert(s).")
                         else:
-                            st.error("❌ Database connection failed.")
+                            st.info("⚠️ Already subscribed to all selected alert(s).")
 
         elif tab == "Manage Your Alerts":
             st.markdown("### Manage Your Alert Subscriptions")
@@ -703,66 +656,47 @@ def main():
                 if not is_valid_email(manage_email):
                     st.error("❌ Invalid email address!")
                 else:
-                    connection = get_connection()
-                    if connection:
-                        try:
-                            cursor = connection.cursor(dictionary=True)
-                            cursor.execute("""
-                                SELECT subscription_id, latitude, longitude, severity_level, subscribed_at 
-                                FROM subscription WHERE email=%s ORDER BY subscribed_at DESC
-                            """, (manage_email,))
-                            subs = cursor.fetchall()
-                            if subs:
-                                st.markdown(f"**You have {len(subs)} active subscription(s).**")
+                    subs = supabase.table("subscription").select("*").eq("email", manage_email).order("subscribed_at", desc=True).execute().data
+                    if subs:
+                        st.markdown(f"**You have {len(subs)} active subscription(s).**")
+                        for sub in subs:
+                            with st.expander(
+                                f"📍 ({float(sub['latitude']):.2f}, {float(sub['longitude']):.2f}) - {sub['severity_level']} (Since {sub['subscribed_at'][:10]})"
+                            ):
+                                # Unsubscribe button
+                                if st.button("Unsubscribe", key=f"del_{sub['id']}"):
+                                    supabase.table("subscription").delete().eq("id", sub['id']).execute()
+                                    st.success("✅ Unsubscribed successfully!")
+                                    st.experimental_rerun()
 
-                                for sub in subs:
-                                    with st.expander(
-                                        f"📍 ({sub['latitude']:.2f}, {sub['longitude']:.2f}) - {sub['severity_level']} (Since {sub['subscribed_at'].strftime('%Y-%m-%d')})"
-                                    ):
-                                        # Unsubscribe button
-                                        if st.button("Unsubscribe", key=f"del_{sub['subscription_id']}"):
-                                            cursor.execute("DELETE FROM subscription WHERE subscription_id=%s", (sub['subscription_id'],))
-                                            connection.commit()
-                                            st.success("✅ Unsubscribed successfully!")
+                                # Toggle edit form
+                                if f'editing_{sub["id"]}' not in st.session_state:
+                                    st.session_state[f'editing_{sub["id"]}'] = False
+
+                                if not st.session_state[f'editing_{sub["id"]}']:
+                                    if st.button("Edit Subscription", key=f"edit_btn_{sub['id']}"):
+                                        st.session_state[f'editing_{sub["id"]}'] = True
+                                else:
+                                    with st.form(f"edit_form_{sub['id']}"):
+                                        new_lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=float(sub["latitude"]), key=f"lat_{sub['id']}")
+                                        new_lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=float(sub["longitude"]), key=f"lon_{sub['id']}")
+                                        new_sev = st.selectbox("Severity Level", severity_options, index=severity_options.index(sub["severity_level"]), key=f"sev_{sub['id']}")
+                                        update_submit = st.form_submit_button("Update Subscription")
+                                        if update_submit:
+                                            supabase.table("subscription").update({
+                                                "latitude": new_lat,
+                                                "longitude": new_lon,
+                                                "severity_level": new_sev
+                                            }).eq("id", sub['id']).execute()
+                                            st.success("✅ Subscription updated!")
+                                            st.session_state[f'editing_{sub["id"]}'] = False
                                             st.experimental_rerun()
-
-                                        # Toggle edit form
-                                        if f'editing_{sub["subscription_id"]}' not in st.session_state:
-                                            st.session_state[f'editing_{sub["subscription_id"]}'] = False
-
-                                        if not st.session_state[f'editing_{sub["subscription_id"]}']:
-                                            if st.button("Edit Subscription", key=f"edit_btn_{sub['subscription_id']}"):
-                                                st.session_state[f'editing_{sub["subscription_id"]}'] = True
-                                        else:
-                                            with st.form(f"edit_form_{sub['subscription_id']}"):
-                                                new_lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=float(sub["latitude"]), key=f"lat_{sub['subscription_id']}")
-                                                new_lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=float(sub["longitude"]), key=f"lon_{sub['subscription_id']}")
-                                                new_sev = st.selectbox("Severity Level", severity_options, index=severity_options.index(sub["severity_level"]), key=f"sev_{sub['subscription_id']}")
-                                                update_submit = st.form_submit_button("Update Subscription")
-                                                if update_submit:
-                                                    cursor.execute("""
-                                                        UPDATE subscription
-                                                        SET latitude=%s, longitude=%s, severity_level=%s
-                                                        WHERE subscription_id=%s
-                                                    """, (new_lat, new_lon, new_sev, sub['subscription_id']))
-                                                    connection.commit()
-                                                    st.success("✅ Subscription updated!")
-                                                    st.session_state[f'editing_{sub["subscription_id"]}'] = False
-                                                    st.experimental_rerun()
-                                            if st.button("Cancel Edit", key=f"cancel_{sub['subscription_id']}"):
-                                                st.session_state[f'editing_{sub["subscription_id"]}'] = False
-                            else:
-                                st.info("ℹ️ No active subscriptions found.")
-                        except Exception as e:
-                            logger.error(f"Error fetching subscriptions: {e}")
-                            st.error("❌ Failed to load subscriptions.")
-                        finally:
-                            cursor.close()
-                            connection.close()
+                                    if st.button("Cancel Edit", key=f"cancel_{sub['id']}"):
+                                        st.session_state[f'editing_{sub["id"]}'] = False
                     else:
-                        st.error("❌ Database connection failed.")
+                        st.info("ℹ️ No active subscriptions found.")
 
-    # 6 - Fire Risk Visualization (NEW, with Visualization PDF only here)
+    # 6 - Fire Risk Visualization
     with tabs[6]:
         st.markdown("## Fire Risk Visualization")
         min_lat, max_lat = float(df["latitude"].min()), float(df["latitude"].max())
@@ -800,7 +734,7 @@ def main():
         else:
             st.warning("No fire records in selected region and date range.")
 
-            # 7 - Help / FAQ
+    # 7 - Help / FAQ
     with tabs[7]:
         st.title("❓ Help & FAQ")
         st.markdown("Welcome to the EmberAlert support page. Here you’ll find answers to common questions and guidance on using each feature.")
@@ -863,7 +797,6 @@ def main():
             - For technical issues or feedback, email us at **ldawa9808@gmail.com**
             - We're here to help you stay safe from wildfires! 🔥
             """)
-
 
 if __name__ == "__main__":
     main()
