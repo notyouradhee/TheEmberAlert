@@ -689,7 +689,7 @@ def main():
                                                 "severity_level": new_sev
                                             }).eq("subscription_id", sub['subscription_id']).execute()
                                             st.success("✅ Subscription updated!")
-                                            st.session_state[f'editing_{sub["subsription_id"]}'] = False
+                                            st.session_state[f'editing_{sub["subscription_id"]}'] = False
                                             st.experimental_rerun()
                                     if st.button("Cancel Edit", key=f"cancel_{sub['subscription_id']}"):
                                         st.session_state[f'editing_{sub["subscription_id"]}'] = False
