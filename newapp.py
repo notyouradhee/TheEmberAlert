@@ -678,9 +678,9 @@ def main():
                                         st.session_state[f'editing_{sub["subscription_id"]}'] = True
                                 else:
                                     with st.form(f"edit_form_{sub['subscription_id']}"):
-                                        new_lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=float(sub["latitude"]), key=f"lat_{sub['id']}")
-                                        new_lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=float(sub["longitude"]), key=f"lon_{sub['id']}")
-                                        new_sev = st.selectbox("Severity Level", severity_options, index=severity_options.index(sub["severity_level"]), key=f"sev_{sub['id']}")
+                                        new_lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=float(sub["latitude"]), key=f"lat_{sub['subscription_id']}")
+                                        new_lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=float(sub["longitude"]), key=f"lon_{sub['subscription_id']}")
+                                        new_sev = st.selectbox("Severity Level", severity_options, index=severity_options.index(sub["severity_level"]), key=f"sev_{sub['subscription_id']}")
                                         update_submit = st.form_submit_button("Update Subscription")
                                         if update_submit:
                                             supabase.table("subscription").update({
@@ -691,8 +691,8 @@ def main():
                                             st.success("✅ Subscription updated!")
                                             st.session_state[f'editing_{sub["subsription_id"]}'] = False
                                             st.experimental_rerun()
-                                    if st.button("Cancel Edit", key=f"cancel_{sub['id']}"):
-                                        st.session_state[f'editing_{sub["id"]}'] = False
+                                    if st.button("Cancel Edit", key=f"cancel_{sub['subscription_id']}"):
+                                        st.session_state[f'editing_{sub["subscription_id"]}'] = False
                     else:
                         st.info("ℹ️ No active subscriptions found.")
 
