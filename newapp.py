@@ -664,20 +664,20 @@ def main():
                                 f"📍 ({float(sub['latitude']):.2f}, {float(sub['longitude']):.2f}) - {sub['severity_level']} (Since {sub['subscribed_at'][:10]})"
                             ):
                                 # Unsubscribe button
-                                if st.button("Unsubscribe", key=f"del_{sub['id']}"):
-                                    supabase.table("subscription").delete().eq("id", sub['id']).execute()
+                                if st.button("Unsubscribe", key=f"del_{sub['subscription_id']}"):
+                                    supabase.table("subscription").delete().eq("id", sub['subscription_id']).execute()
                                     st.success("✅ Unsubscribed successfully!")
                                     st.experimental_rerun()
 
                                 # Toggle edit form
-                                if f'editing_{sub["id"]}' not in st.session_state:
-                                    st.session_state[f'editing_{sub["id"]}'] = False
+                                if f'editing_{sub["subscription_id"]}' not in st.session_state:
+                                    st.session_state[f'editing_{sub["subscription_id"]}'] = False
 
-                                if not st.session_state[f'editing_{sub["id"]}']:
-                                    if st.button("Edit Subscription", key=f"edit_btn_{sub['id']}"):
-                                        st.session_state[f'editing_{sub["id"]}'] = True
+                                if not st.session_state[f'editing_{sub["subscription_id"]}']:
+                                    if st.button("Edit Subscription", key=f"edit_btn_{sub['subscription_id']}"):
+                                        st.session_state[f'editing_{sub["subscription_id"]}'] = True
                                 else:
-                                    with st.form(f"edit_form_{sub['id']}"):
+                                    with st.form(f"edit_form_{sub['subscription_id']}"):
                                         new_lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=float(sub["latitude"]), key=f"lat_{sub['id']}")
                                         new_lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=float(sub["longitude"]), key=f"lon_{sub['id']}")
                                         new_sev = st.selectbox("Severity Level", severity_options, index=severity_options.index(sub["severity_level"]), key=f"sev_{sub['id']}")
@@ -687,9 +687,9 @@ def main():
                                                 "latitude": new_lat,
                                                 "longitude": new_lon,
                                                 "severity_level": new_sev
-                                            }).eq("id", sub['id']).execute()
+                                            }).eq("subscription_id", sub['subscription_id']).execute()
                                             st.success("✅ Subscription updated!")
-                                            st.session_state[f'editing_{sub["id"]}'] = False
+                                            st.session_state[f'editing_{sub["subsription_id"]}'] = False
                                             st.experimental_rerun()
                                     if st.button("Cancel Edit", key=f"cancel_{sub['id']}"):
                                         st.session_state[f'editing_{sub["id"]}'] = False
