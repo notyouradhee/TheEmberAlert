@@ -166,9 +166,15 @@ def notify_matching_subscribers(fire_lat, fire_lon, fire_confidence, fire_severi
 @st.cache_data
 def load_data(country):
     if country == 'Nepal':
-        df = pd.read_csv(r"D:\emberalert\wildfire_prediction\data\processed\nepal_combined.csv")
+        base_dir = os.path.dirname(__file__)  # Get the current script directory
+        csv_path = os.path.join(base_dir, "data", "processed", "nepal_combined.csv")
+        df = pd.read_csv(csv_path)
+        # df = pd.read_csv(r"D:\emberalert\wildfire_prediction\data\processed\nepal_combined.csv")
     elif country == 'South Korea':
-        df = pd.read_csv(r"D:\emberalert\wildfire_prediction\data\processed\korea_combined.csv")
+        base_dir = os.path.dirname(__file__)  # Get the current script directory
+        csv_path = os.path.join(base_dir, "data", "processed", "korea_combined.csv")
+        df = pd.read_csv(csv_path)
+        # df = pd.read_csv(r"D:\emberalert\wildfire_prediction\data\processed\korea_combined.csv")
     else:
         df = pd.DataFrame()
     if not df.empty:
